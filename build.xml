@@ -1,0 +1,21 @@
+<project name="ex_solutions" basedir=".">
+	<target name="deploy-solutions">
+		<ant dir="ex01_firstws_solution" target="deploy" />
+		<ant dir="ex03_soap_solution" target="deploy" />
+		<ant dir="ex04_fromwsdl_solution">
+			<target name="build-web-service" />
+			<target name="deploy" />
+		</ant>
+		<ant dir="ex05_soapclient_solution" target="wsimport" />
+		<ant dir="ex05_soapclient_solution"
+			 antfile="build-catalog-client.xml"
+			 target="build-client-catalog-service"/>
+		<ant dir="Ex05_soapclient-bonus_async_solution"
+			 target="wsimport-async"/>
+		<ant dir="ex06_jaxrs_solution" target="deploy" />
+		<ant dir="ex07_json_solution" target="deploy" />
+		<ant dir="ex09_security_soap_solution" target="deploy" />
+		<ant dir="ex09_security_rest_solution" target="deploy" />
+		<ant dir="ex10_validation_solution" target="deploy" />
+	</target>
+</project>	

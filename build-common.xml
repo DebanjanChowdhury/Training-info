@@ -1,0 +1,203 @@
+<project basedir="." default="build" name="common">
+    <property file="../build.properties" />
+
+    <property name="lib" value="../lib"/>
+    <property name="build" value="build"/>
+    <property name="generated" value="generated"/>
+    <property name="src" value="src"/>
+    
+    <path id="compile.classpath">
+        <fileset dir="${lib}">
+            <include name="**/*.jar" />
+        </fileset>
+    </path>
+
+    <path id="project.classpath">
+        <pathelement location="${build}" />
+        <path refid="compile.classpath" />
+    </path>
+
+    <target name="clean" description="Removes all artifacts from build directory">
+        <delete dir="${build}" />
+        <delete dir="${generated}" />
+        <mkdir dir="${generated}" />
+        <delete dir=".">
+            <include name="*.?ar" />
+            <include name="junit*.*" />
+        </delete>
+    </target>
+
+    <target name="init">
+        <tstamp />
+        <mkdir dir="${build}" />
+        <mkdir dir="${generated}" />
+    </target>
+
+    <target name="copyconfig" depends="init"> <!--Copies configuration files to CLASSPATH-->
+        <echo message="copying config files ... " />
+        <copy todir="${build}">
+            <fileset dir="config" includes="**/*" />
+            <fileset dir="src" includes="**/*" excludes="**/*.java" />
+            <filterset>
+                <filter token="appname" value="${appname}"/>
+            </filterset>
+        </copy>
+    </target>
+
+    <target name="build" depends="copyconfig"> <!--Compiles Java code to build directory-->
+        <javac includeantruntime="false" destdir="${build}" debug="true" fork="true">
+            <src path="src" />
+            <src path="${generated}" />
+            <classpath refid="compile.classpath" />
+        </javac>
+    </target>
+
+    <target name="wsgen" depends="build">
+        <fail unless="wsgen.sei" message="The wsgen.sei property must be set"/>
+        <echo message="Running wsgen on ${wsgen.sei}" />
+        
+        <exec executable="${wsgen.bin}">
+            <arg line="${wsgen.sei}" />
+            <arg line="-classpath" />
+            <arg pathref="project.classpath" />
+            <arg line="-d ${build}" />
+            <arg line="-keep -s ${generated}" />
+            <arg line="-verbose" />
+        </exec>
+    </target>
+
+    <target name="wsimport" depends="init">
+        <fail unless="wsimport.wsdl" message="The wsimport.wsdl property must be set"/>
+        <fail unless="wsimport.package" message="The wsimport.package property must be set"/>
+        <echo message="Retrieving wsdl from ${wsimport.wsdl}" />
+        <property name="wsimport.wsdllocation" value="${wsimport.wsdl}" />
+        <echo message="Using wsdlocation ${wsimport.wsdllocation}" />
+        
+        <exec executable="${wsimport.bin}">
+            <arg line="${wsimport.wsdl}" />
+            <arg line="-wsdllocation ${wsimport.wsdllocation}" />
+            <arg line="-p ${wsimport.package}" />
+            <arg line="-d ${build}" />
+            <arg line="-keep -s ${generated}" />
+            <arg line="-verbose" />
+        </exec>
+    </target>
+
+    <target name="wsimport-with-binding" depends="init">
+        <fail unless="wsimport.wsdl" message="The wsimport.wsdl property must be set"/>
+        <fail unless="wsimport.package" message="The wsimport.package property must be set"/>
+        <fail unless="wsimport.binding" message="The wsimport.binding property must be set"/>
+        <echo message="Retrieving wsdl from ${wsimport.wsdl}" />
+        <property name="wsimport.wsdllocation" value="${wsimport.wsdl}" />
+        <echo message="Using wsdlocation ${wsimport.wsdllocation}" />
+
+        <!-- based on which properties are set, include one or two binding files -->
+        <condition property="binding.options"
+                   value="-b ${wsimport.binding} -b ${wsimport.binding2}"
+                   else="-b ${wsimport.binding}">
+            <isset property="wsimport.binding2"/>
+        </condition>
+
+        <echo>$${binding.options} = ${binding.options}</echo>
+
+        <exec executable="${wsimport.bin}">
+            <arg line="${wsimport.wsdl}" />
+            <arg line="${binding.options}" />
+            <arg line="-wsdllocation ${wsimport.wsdllocation}" />
+            <arg line="-p ${wsimport.package}" />
+            <arg line="-d ${build}" />
+            <arg line="-keep -s ${generated}" />
+            <arg line="-verbose" />
+        </exec>
+    </target>
+
+    <target name="doc">
+        <property name="doc.dir" value="../docs/${ant.project.name}" />
+        <delete dir="${doc.dir}" />
+        <mkdir dir="${doc.dir}" />
+        <javadoc doctitle="577: XML Web Services" classpathref="project.classpath" destdir="${doc.dir}" private="true" linksource="true">
+            <fileset dir="src">
+                <include name="**/*.java" />
+                <exclude name="**/*_Ex*.java" />
+                <exclude name="**/*_Sln*.java" />
+            </fileset>
+            <link href="file:///C:/docs/java6/docs/api" />
+        </javadoc>
+    </target>
+
+    <target name="test" depends="build">
+        <junit description="tests" fork="yes">
+            <batchtest todir=".">
+                <fileset dir="src">
+                    <include name="**/*Test.java" />
+                </fileset>
+            </batchtest>
+            <formatter type="plain" usefile="no" />
+            <classpath>
+                <path refid="project.classpath" />
+            </classpath>
+        </junit>
+    </target>
+
+    <target name="war" depends="build"> <!--Creates the WAR file for the web application-->
+        <war destfile="${appname}.war" webxml="war/WEB-INF/web.xml">
+            <fileset dir="war" />
+            <classes dir="${build}">
+                <include name="**/*" />
+            </classes>
+            <lib dir="${lib}">
+                <include name="commons-lang3*.jar"/>
+                <include name="logback*.jar"/>
+                <include name="mysql-connector*.jar"/>
+                <include name="slf4j*.jar"/>
+            </lib>
+            <zipfileset dir="${generated}" prefix="WEB-INF/wsdl" includes="*.wsdl"/>
+            <zipfileset dir="${generated}" prefix="WEB-INF/wsdl" includes="*.xsd"/>
+        </war>
+    </target>
+
+    <target name="start_glassfish">
+        <exec executable="${glassfish.asadmin}">
+            <arg line="start-domain" />
+        </exec>
+    </target>
+
+    <target name="stop_glassfish">
+        <exec executable="${glassfish.asadmin}">
+            <arg line="stop-domain" />
+        </exec>
+    </target>
+
+    <target name="deploy" depends="war" description="Deploys WAR file to Glassfish">
+        <exec executable="${glassfish.asadmin}">
+            <arg line="--user admin" />
+            <arg line="--passwordfile ../password.txt" />
+            <arg line="deploy" />
+            <arg line="--force=true" />
+            <arg line="${appname}.war" />
+        </exec>
+    </target>
+
+    <target name="undeploy" description="Undeploys application from Glassfish">
+        <exec executable="${glassfish.asadmin}">
+            <arg line="--user admin" />
+            <arg line="--passwordfile ../password.txt" />
+            <arg line="undeploy" />
+            <arg line="${appname}" />
+        </exec>
+    </target>
+
+    <target name="debug">
+        <echo>$${appname} = ${appname}</echo>
+        <echo>$${glassfish.asadmin} = ${glassfish.asadmin}</echo>
+        <echo>$${glassfish.autodeploy.dir} = ${glassfish.autodeploy.dir}</echo>
+        <echo>$${glassfish.dir} = ${glassfish.dir}</echo>
+        <echo>$${java.cacerts} = ${java.cacerts}</echo>
+        <echo>$${java.home} = ${java.home}</echo>
+        <echo>$${lib} = ${lib}</echo>
+        <echo>$${wsimport.bin} = ${wsimport.bin}</echo>
+        <echo>$${wsgen.bin} = ${wsgen.bin}</echo>
+        <echo>$${wstools.dir} = ${wstools.dir}</echo>
+    </target>
+    
+</project>

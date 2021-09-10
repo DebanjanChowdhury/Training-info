@@ -1,0 +1,259 @@
+<project basedir="." default="build" name="common">
+    <property file="../build.properties" />
+
+    <property name="lib" value="../lib"/>
+    <property name="build" value="build"/>
+    <property name="generated" value="generated"/>
+    
+    <path id="compile.classpath">
+        <fileset dir="${lib}">
+            <include name="**/*.jar" />
+        </fileset>
+    </path>
+
+    <path id="project.classpath">
+        <pathelement location="${build}" />
+        <path refid="compile.classpath" />
+    </path>
+
+    <target name="clean" description="Removes all artifacts from build directory">
+        <delete dir="${build}" />
+        <delete dir="${generated}" />
+        <delete dir=".">
+            <include name="*.?ar" />
+            <include name="junit*.*" />
+        </delete>
+    </target>
+
+    <target name="init">
+        <tstamp />
+        <mkdir dir="${build}" />
+        <mkdir dir="${generated}" />
+    </target>
+
+    <target name="copyconfig" depends="init"> <!--Copies configuration files to CLASSPATH-->
+        <echo message="copying config files ... " />
+        <copy todir="${build}">
+            <fileset dir="config" includes="**/*" />
+            <fileset dir="src" includes="**/*" excludes="**/*.java" />
+        </copy>
+    </target>
+
+    <target name="build" depends="copyconfig"> <!--Compiles Java code to build directory-->
+        <javac includeantruntime="false" destdir="${build}" debug="true" fork="true">
+            <src path="src" />
+            <src path="${generated}" />
+            <!-- Make Eclipse automatically copy files from config to build dir -->
+            <src path="config" />
+            <classpath refid="compile.classpath" />
+        </javac>
+    </target>
+
+    <path id="jaxws.classpath">
+        <fileset dir="${lib}">
+            <include name="webservices-osgi.jar" />
+            <include name="ant/*.jar" />
+        </fileset>
+    </path>
+    
+    <taskdef name="wsgen" classname="com.sun.tools.ws.ant.WsGen" classpathref="jaxws.classpath" />
+    <taskdef name="wsimport" classname="com.sun.tools.ws.ant.WsImport" classpathref="jaxws.classpath" />
+
+    <target name="wsgen" depends="build">
+        <fail unless="wsgen.sei" message="Property wsgen.sei must be set before running wsgen"/>
+        <echo message="Running wsgen on ${wsgen.sei}" />
+        <wsgen sei="${wsgen.sei}" 
+               classpathref="project.classpath" 
+               genwsdl="true" 
+               keep="true" 
+               destdir="${build}" 
+               resourcedestdir="${generated}" 
+               sourcedestdir="${generated}">
+        </wsgen>
+    </target>
+    
+    <target name="wsimport" depends="init">
+        <echo message="Retrieving wsdl from ${wsimport.wsdl}" />
+        <property name="wsimport.wsdllocation" value="${wsimport.wsdl}" />
+        <echo message="Using wsdlocation ${wsimport.wsdllocation}" />
+        <wsimport wsdl="${wsimport.wsdl}" 
+                  wsdllocation="${wsimport.wsdllocation}" 
+                  package="${wsimport.package}" 
+                  keep="true" 
+                  sourcedestdir="${generated}" 
+                  destdir="${build}">
+        </wsimport>
+    </target>
+
+    <target name="wsimport_with_binding" depends="init">
+        <echo message="Retrieving wsdl from ${wsimport.wsdl}" />
+        <property name="wsimport.wsdllocation" value="${wsimport.wsdl}" />
+        <echo message="Using wsdlocation ${wsimport.wsdllocation}" />
+        <wsimport wsdl="${wsimport.wsdl}" 
+                  wsdllocation="${wsimport.wsdllocation}" 
+                  package="${wsimport.package}" 
+                  keep="true" 
+                  sourcedestdir="${generated}" 
+                  destdir="${build}">
+            <binding dir="etc" includes="${wsimport.binding}" />
+        </wsimport>
+    </target>
+
+    <target name="doc">
+        <property name="doc.dir" value="../docs/${ant.project.name}" />
+        <delete dir="${doc.dir}" />
+        <mkdir dir="${doc.dir}" />
+        <javadoc doctitle="577: XML Web Services" classpathref="project.classpath" destdir="${doc.dir}" private="true" linksource="true">
+            <fileset dir="src">
+                <include name="**/*.java" />
+                <exclude name="**/*_Ex*.java" />
+                <exclude name="**/*_Sln*.java" />
+            </fileset>
+            <link href="file:///C:/docs/java6/docs/api" />
+        </javadoc>
+    </target>
+
+    <target name="test" depends="build">
+        <junit description="tests" fork="yes">
+            <batchtest todir=".">
+                <fileset dir="src">
+                    <include name="**/*Test.java" />
+                </fileset>
+            </batchtest>
+            <formatter type="plain" usefile="no" />
+            <classpath>
+                <path refid="project.classpath" />
+            </classpath>
+        </junit>
+    </target>
+
+    <target name="war" depends="build"> <!--Creates the WAR file for the web application-->
+        <war destfile="${appname}.war" webxml="war/WEB-INF/web.xml">
+            <fileset dir="war" />
+            <classes dir="${build}">
+                <include name="**/*" />
+            </classes>
+            <lib dir="${lib}">
+                <include name="mysql-connector*.jar"/>
+                <include name="slf4j*.jar"/>
+                <include name="logback*.jar"/>
+            </lib>
+            <zipfileset dir="${generated}" prefix="WEB-INF/wsdl" includes="*.wsdl"/>
+            <zipfileset dir="${generated}" prefix="WEB-INF/wsdl" includes="*.xsd"/>
+        </war>
+    </target>
+
+    <target name="start_glassfish">
+        <exec executable="${glassfish.asadmin}">
+            <arg line="start-domain" />
+        </exec>
+    </target>
+
+    <target name="stop_glassfish">
+        <exec executable="${glassfish.asadmin}">
+            <arg line="stop-domain" />
+        </exec>
+    </target>
+
+    <!--
+    <target name="ejbjar" depends="build" description="Creates a jar of EJBs">
+        <jar destfile="${appname}.jar">
+            <metainf dir="config/META-INF" includes="**/*" />
+            <fileset dir="${build}">
+                <exclude name="**/webapps/*" />
+                <exclude name="**/*Test*" />
+            </fileset>
+            <fileset dir="${lib}">
+                <include name="**/*" />
+            </fileset>
+        </jar>
+    </target>
+
+    <target name="ear" depends="build" description="Creates an enterprise application">
+        // entities and session bean interfaces go into a lib directory of ${appname}.jar
+        <mkdir dir="${build}/lib" />
+        <jar destfile="${build}/lib/${appname}-common.jar">
+            <fileset dir="${build}">
+                <include name="**/common/*" />
+            </fileset>
+        </jar>
+        // put 3rd party libs also in that directory
+        <copy todir="${build}/lib">
+            <fileset dir="${lib}">
+                <include name="**/*.jar" />
+            </fileset>
+        </copy>
+        // create a jar file of just the implementation EJBs
+        <jar destfile="${build}/${appname}-ejbs.jar">
+            <metainf dir="config/META-INF" includes="*.xml" />
+            <fileset dir="${build}">
+                <include name="**/backend/*" />
+            </fileset>
+        </jar>
+        // Create war file with just web classes
+        <war warfile="${build}/${appname}.war" webxml="war/WEB-INF/web.xml">
+            <fileset dir="war" />
+            <classes dir="${build}">
+                <include name="**/webapps/*" />
+            </classes>
+        </war>
+        // Create ear file with lib, jar and war and any configuration files meant to be in classpath
+        <jar destfile="${appname}.ear">
+            <fileset dir="${build}" includes="**/*">
+                <exclude name="**/*.class" />
+            </fileset>
+        </jar>
+    </target>
+
+    <target name="deploy_ejb" depends="ejbjar" description="Deploys to Glassfish">
+        <exec executable="${glassfish.asadmin}">
+            <arg line="- -user admin" />
+            <arg line="- -passwordfile ../password.txt" />
+            <arg line="deploy" />
+            <arg line="- -force=true" />
+            <arg line="${appname}.jar" />
+        </exec>
+    </target>
+
+    <target name="verify_ear" depends="ear" description="verify compliance of the app against Java EE spec">
+        <exec executable="${glassfish.asadmin}/../verifier" failonerror="true" vmlauncher="false">
+            <arg line="-p -d ${build} ${appname}.ear" />
+        </exec>
+    </target>
+
+    <target name="deploy_ear" depends="ear" description="Deploys to Glassfish">
+        <exec executable="${glassfish.asadmin}">
+            <arg line="- -user admin" />
+            <arg line="- -passwordfile ../password.txt" />
+            <arg line="deploy" />
+            <arg line="- -force=true" />
+            <arg line="${appname}.ear" />
+        </exec>
+    </target>
+
+    <target name="autodeploy_ejb" depends="jar" description="Deploys to Glassfish">
+        <copy file="${appname}.jar" todir="${glassfish.autodeploy.dir}" />
+    </target>
+
+    -->
+
+    <target name="deploy" depends="war" description="Deploys WAR file to Glassfish">
+        <exec executable="${glassfish.asadmin}">
+            <arg line="--user admin" />
+            <arg line="--passwordfile ../password.txt" />
+            <arg line="deploy" />
+            <arg line="--force=true" />
+            <arg line="${appname}.war" />
+        </exec>
+    </target>
+
+    <target name="undeploy" description="Undeploys application from Glassfish">
+        <exec executable="${glassfish.asadmin}">
+            <arg line="--user admin" />
+            <arg line="--passwordfile ../password.txt" />
+            <arg line="undeploy" />
+            <arg line="${appname}" />
+        </exec>
+    </target>
+
+</project>
